@@ -1,0 +1,10 @@
+.env
+.venv
+.vscode
+__pycache__
+*.jar
+*.gz
+*.csv
+
+workspace/datamart/project
+workspace/datamart/target

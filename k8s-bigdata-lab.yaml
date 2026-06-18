@@ -1,0 +1,148 @@
+---
+# 1. Создаем отдельное пространство имен (Namespace)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bigdata-lab
+
+---
+# 2. Секреты (Пункт 6: Размещение секретов в k8s)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: greenplum-secrets
+  namespace: bigdata-lab
+type: Opaque
+data:
+  POSTGRES_USER: Z3BhZG1pbg==
+  POSTGRES_PASSWORD: cGl2b3RhbA==
+  POSTGRES_DB: cG9zdGdyZXM=
+
+---
+# 3. Общее хранилище (Shared Volume)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shared-workspace-pvc
+  namespace: bigdata-lab
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# 4. Сервис для Базы Данных 
+apiVersion: v1
+kind: Service
+metadata:
+  name: greenplum-service
+  namespace: bigdata-lab
+spec:
+  selector:
+    app: greenplum
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+
+---
+# 5. Развертывание Базы Данных Greenplum
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: greenplum-deployment
+  namespace: bigdata-lab
+spec:
+  replicas: 1 
+  selector:
+    matchLabels:
+      app: greenplum
+  template:
+    metadata:
+      labels:
+        app: greenplum
+    spec:
+      containers:
+        - name: greenplum
+          image: projectairws/greenplum:latest 
+          imagePullPolicy: IfNotPresent 
+          tty: true       # Аналог tty: true в docker-compose
+          stdin: true     # Аналог stdin_open: true в docker-compose
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef: 
+                name: greenplum-secrets
+
+---
+# 6. Сервис Витрины Данных (Scala) 
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: datamart-scala-job
+  namespace: bigdata-lab
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: scala-datamart
+          image: scala-datamart-image:latest # Используем твой кастомный образ
+          imagePullPolicy: IfNotPresent # Важно! Берем локальный кэш
+          command: ["/bin/sh", "-c"]
+          args: 
+            - |
+              echo "Ожидание загрузки кода в PVC..."
+              while [ ! -f /workspace/datamart/build.sbt ]; do sleep 5; done;
+              echo "Код найден! Запускаем витрину данных..."
+              cd /workspace/datamart && sbt run
+          volumeMounts:
+            - name: workspace-volume
+              mountPath: /workspace
+          env:
+            - name: DB_HOST
+              value: "greenplum-service" 
+      volumes:
+        - name: workspace-volume
+          persistentVolumeClaim:
+            claimName: shared-workspace-pvc
+
+---
+# 7. Сервис Модели (PySpark) 
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pyspark-model-job
+  namespace: bigdata-lab
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: pyspark-model
+          image: pyspark-env-image:latest # Используем твой кастомный образ
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args: 
+            - |
+              echo "Ожидание скрипта ml_pipeline.py..."
+              while [ ! -f /workspace/ml_pipeline.py ]; do sleep 5; done;
+              echo "Ожидание данных от витрины..."
+              while [ ! -f /workspace/shared_data/features.parquet/_SUCCESS ]; do sleep 5; done;
+              echo "Данные готовы! Запускаем ML модель..."
+              python /workspace/ml_pipeline.py
+          volumeMounts:
+            - name: workspace-volume
+              mountPath: /workspace
+          env:
+            - name: DB_HOST
+              value: "greenplum-service"
+          envFrom:
+            - secretRef:
+                name: greenplum-secrets
+      volumes:
+        - name: workspace-volume
+          persistentVolumeClaim:
+            claimName: shared-workspace-pvc

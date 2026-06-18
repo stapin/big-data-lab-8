@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  greenplum-db:
+    image: projectairws/greenplum:latest
+    container_name: greenplum-container
+    ports:
+      - "5432:5432"
+    tty: true
+    stdin_open: true
+
+  pyspark-env:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spark-pure-container
+    network_mode: "service:greenplum-db"
+    volumes:
+      - ./workspace:/workspace
+    depends_on:
+      - greenplum-db
+
+  scala-datamart:
+    build:
+      context: .
+      dockerfile: Dockerfile.scala
+    container_name: scala-datamart-container
+    network_mode: "service:greenplum-db" # Подключаемся к сети Greenplum
+    volumes:
+      - ./workspace:/workspace         # Общая папка для обмена Parquet файлами
+    depends_on:
+      - greenplum-db
