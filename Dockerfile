@@ -4,8 +4,8 @@ RUN apt-get update && \
     apt-get install -y default-jre wget && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir pyspark==3.5.0 python-dotenv
+RUN pip install --no-cache-dir pyspark==3.5.0 python-dotenv numpy
 
 WORKDIR /workspace
 
-CMD ["tail", "-f", "/dev/null"]
+COPY ./workspace /workspace/

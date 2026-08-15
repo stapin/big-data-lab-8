@@ -5,13 +5,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class GreenplumConfig:
-    HOST = os.getenv("HOST", "localhost")
+    DB_HOST = os.getenv("DB_HOST", "localhost")
     PORT = os.getenv("PORT", "5432")
-    DB_NAME = os.getenv("DB_NAME", "postgres") 
-    USER = os.getenv("USER", "gpadmin")
-    PASSWORD = os.getenv("PASSWORD") 
+    DB_NAME = os.getenv("DB_NAME") 
+    USER = os.getenv("POSTGRES_USER", "gpadmin")
+    PASSWORD = os.getenv("POSTGRES_PASSWORD") 
     
-    JDBC_URL = f"jdbc:postgresql://{HOST}:{PORT}/{DB_NAME}?sslmode=disable&stringtype=unspecified"
+    JDBC_URL = f"jdbc:postgresql://{DB_HOST}:{PORT}/{DB_NAME}?sslmode=disable&stringtype=unspecified"
     
     PROPERTIES = {
         "user": USER,

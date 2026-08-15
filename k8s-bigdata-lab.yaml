@@ -6,20 +6,20 @@ metadata:
   name: bigdata-lab
 
 ---
-# 2. Секреты (Пункт 6: Размещение секретов в k8s)
+# 2. Секреты (Безопасное хранение учетных данных)
 apiVersion: v1
 kind: Secret
 metadata:
   name: greenplum-secrets
   namespace: bigdata-lab
 type: Opaque
-data:
-  POSTGRES_USER: Z3BhZG1pbg==
-  POSTGRES_PASSWORD: cGl2b3RhbA==
-  POSTGRES_DB: cG9zdGdyZXM=
+stringData: # <--- МЕНЯЕМ data на stringData, чтобы писать текст без Base64 (защита от багов)
+  POSTGRES_USER: gpadmin
+  POSTGRES_PASSWORD: pivotal
+  POSTGRES_DB: gpadmin
 
 ---
-# 3. Общее хранилище (Shared Volume)
+# 3. Общее хранилище (Shared Volume) - Используется для передачи Parquet
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -68,44 +68,51 @@ spec:
         - name: greenplum
           image: projectairws/greenplum:latest 
           imagePullPolicy: IfNotPresent 
-          tty: true       # Аналог tty: true в docker-compose
-          stdin: true     # Аналог stdin_open: true в docker-compose
+          tty: true
+          stdin: true
           ports:
             - containerPort: 5432
           envFrom:
             - secretRef: 
                 name: greenplum-secrets
+          lifecycle:
+            postStart:
+              exec:
+                # Хак: Заходим локально (через trust) и принудительно ставим нужный нам пароль!
+                command: 
+                  - "/bin/sh"
+                  - "-c"
+                  - |
+                    while ! su - gpadmin -c "psql -d gpadmin -c \"ALTER ROLE gpadmin WITH PASSWORD 'pivotal';\""; do sleep 5; done
 
 ---
-# 6. Сервис Витрины Данных (Scala) 
+# 6. Сервис Витрины Данных - ЭКСТРАКТОР (Scala) 
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: datamart-scala-job
+  name: datamart-scala-extractor-job
   namespace: bigdata-lab
 spec:
   template:
     spec:
       restartPolicy: OnFailure
       containers:
-        - name: scala-datamart
-          image: scala-datamart-image:latest # Используем твой кастомный образ
-          imagePullPolicy: IfNotPresent # Важно! Берем локальный кэш
+        - name: scala-datamart-extractor
+          image: scala-datamart-image:latest 
+          imagePullPolicy: Always 
           command: ["/bin/sh", "-c"]
-          args: 
-            - |
-              echo "Ожидание загрузки кода в PVC..."
-              while [ ! -f /workspace/datamart/build.sbt ]; do sleep 5; done;
-              echo "Код найден! Запускаем витрину данных..."
-              cd /workspace/datamart && sbt run
+          args: ["cd /workspace/datamart && sbt \"runMain DataMartExtractor\""]
           volumeMounts:
-            - name: workspace-volume
-              mountPath: /workspace
+            - name: shared-data-volume
+              mountPath: /workspace/shared_data
           env:
             - name: DB_HOST
-              value: "greenplum-service" 
+              value: "greenplum-service"
+          envFrom: 
+            - secretRef:
+                name: greenplum-secrets
       volumes:
-        - name: workspace-volume
+        - name: shared-data-volume
           persistentVolumeClaim:
             claimName: shared-workspace-pvc
 
@@ -122,20 +129,18 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: pyspark-model
-          image: pyspark-env-image:latest # Используем твой кастомный образ
-          imagePullPolicy: IfNotPresent
+          image: pyspark-env-image:v1
+          imagePullPolicy: Always
           command: ["/bin/sh", "-c"]
           args: 
             - |
-              echo "Ожидание скрипта ml_pipeline.py..."
-              while [ ! -f /workspace/ml_pipeline.py ]; do sleep 5; done;
               echo "Ожидание данных от витрины..."
-              while [ ! -f /workspace/shared_data/features.parquet/_SUCCESS ]; do sleep 5; done;
+              while [ ! -d /workspace/shared_data/features.parquet ]; do sleep 5; done;
               echo "Данные готовы! Запускаем ML модель..."
-              python /workspace/ml_pipeline.py
+              python /workspace/main.py
           volumeMounts:
-            - name: workspace-volume
-              mountPath: /workspace
+            - name: shared-data-volume
+              mountPath: /workspace/shared_data
           env:
             - name: DB_HOST
               value: "greenplum-service"
@@ -143,6 +148,42 @@ spec:
             - secretRef:
                 name: greenplum-secrets
       volumes:
-        - name: workspace-volume
+        - name: shared-data-volume
+          persistentVolumeClaim:
+            claimName: shared-workspace-pvc
+
+---
+# 8. Сервис Витрины Данных - ЗАГРУЗЧИК (Scala)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: datamart-scala-loader-job
+  namespace: bigdata-lab
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: scala-datamart-loader
+          image: scala-datamart-image:latest 
+          imagePullPolicy: Always 
+          command: ["/bin/sh", "-c"]
+          args: 
+            - |
+              echo "Ожидание результатов от ML модели..."
+              while [ ! -d /workspace/shared_data/results.parquet ]; do sleep 5; done;
+              echo "Результаты готовы! Загружаем кластеры в Greenplum..."
+              cd /workspace/datamart && sbt "runMain DataMartLoader"
+          volumeMounts:
+            - name: shared-data-volume
+              mountPath: /workspace/shared_data
+          env:
+            - name: DB_HOST
+              value: "greenplum-service"
+          envFrom:
+            - secretRef:
+                name: greenplum-secrets
+      volumes:
+        - name: shared-data-volume
           persistentVolumeClaim:
             claimName: shared-workspace-pvc

@@ -27,11 +27,21 @@ object DataMartLoader {
       sys.exit(1)
     }
 
-    val jdbcUrl = configProps.getProperty("db.url")
+    val dbHost = sys.env.getOrElse("DB_HOST", "localhost")
+    val dbUser = sys.env.getOrElse(
+      "POSTGRES_USER",
+      throw new IllegalArgumentException("Environment variable POSTGRES_USER is not set")
+    )
+    val dbPassword = sys.env.getOrElse(
+      "POSTGRES_PASSWORD",
+      throw new IllegalArgumentException("Environment variable POSTGRES_PASSWORD is not set")
+    )
+    val jdbcUrl = s"jdbc:postgresql://$dbHost:5432/gpadmin?sslmode=disable"
+    println(s">>> Подключение к базе данных Greenplum по адресу: $jdbcUrl")
     val connectionProperties = new Properties()
-    connectionProperties.put("user", configProps.getProperty("db.user"))
-    connectionProperties.put("password", configProps.getProperty("db.password"))
-    connectionProperties.put("driver", configProps.getProperty("db.driver"))
+    connectionProperties.put("user", dbUser)
+    connectionProperties.put("password", dbPassword)
+    connectionProperties.put("driver", "org.postgresql.Driver")
 
     // 3. Чтение результатов работы Python-модели из Volume
     val inputPath = "/workspace/shared_data/results.parquet"
