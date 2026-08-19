@@ -19,14 +19,3 @@ services:
       - ./workspace:/workspace
     depends_on:
       - greenplum-db
-
-  scala-datamart:
-    build:
-      context: .
-      dockerfile: Dockerfile.scala
-    container_name: scala-datamart-container
-    network_mode: "service:greenplum-db" # Подключаемся к сети Greenplum
-    volumes:
-      - ./workspace:/workspace         # Общая папка для обмена Parquet файлами
-    depends_on:
-      - greenplum-db

@@ -1,0 +1,25 @@
+spark_profiles:
+  seeder:
+    app_name: "Data_Seeder"
+    master: "local[*]"
+    settings:
+      spark.driver.memory: "1g"
+      spark.executor.memory: "2g"
+      
+  ml_pipeline:
+    app_name: "ML_Pipeline"
+    master: "local[*]"
+    settings:
+      spark.driver.memory: "2g"
+      spark.executor.memory: "4g"
+      spark.memory.fraction: "0.8"
+      spark.sql.shuffle.partitions: "10"
+      spark.default.parallelism: "10"
+
+  data_mart:
+    app_name: "DataMart"
+    master: "local[*]"
+    setting:
+      spark.driver.bindAddress: "0.0.0.0"
+      spark.driver.host: "127.0.0.1"
+      spark.driver.extraJavaOptions: "-Djava.net.preferIPv4Stack=true"

@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-
+import yaml
 
 load_dotenv()
 
@@ -18,23 +18,35 @@ class GreenplumConfig:
         "password": PASSWORD,
         "driver": "org.postgresql.Driver"
     }
+
     
     RAW_TABLE = "products_raw"
+    FEATURES_TABLE = "features"
+    PREDICTIONS_TABLE = "predictions"
     CLUSTERED_TABLE = "products_clustered"
 
-class SparkConfig:
-    APP_NAME = "Greenplum_ML_Pipeline"
-    MASTER = "local[*]"
-    
-    JDBC_DRIVER_PATH = os.path.abspath("postgresql-42.5.4.jar")
-    
-    SETTINGS = {
-        "spark.driver.memory": "2g",
-        "spark.executor.memory": "4g",
-        "spark.memory.fraction": "0.8",
-        "spark.sql.shuffle.partitions": "10",
-        "spark.default.parallelism": "10",
+
+class SparkConfigManager:
+    def __init__(self, config_file="spark_config.yaml"):
+        if not os.path.exists(config_file):
+            raise FileNotFoundError(f"Configuration file {config_file} not found!")
+
+        with open(config_file, 'r', encoding='utf-8') as f:
+            yaml_content = f.read()
+
+        self.JDBC_DRIVER_PATH = os.path.abspath("postgresql-42.5.4.jar")
         
-        "spark.jars": JDBC_DRIVER_PATH,
-        "spark.driver.extraClassPath": JDBC_DRIVER_PATH
-    }
+        self._config = yaml.safe_load(yaml_content)
+
+    def get_spark_config(self, profile_name: str) -> dict:
+        profiles = self._config.get("spark_profiles", {})
+        if profile_name not in profiles:
+            raise ValueError(f"Spark profile '{profile_name}' not found in config.yaml")
+
+        profile = profiles[profile_name]
+        profile["spark.jars"] = self.JDBC_DRIVER_PATH
+        profile["spark.driver.extraClassPath"] = self.JDBC_DRIVER_PATH
+        
+        return profile
+
+spark_conf_manager = SparkConfigManager()

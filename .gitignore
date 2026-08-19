@@ -5,6 +5,7 @@ __pycache__
 *.jar
 *.gz
 *.csv
+*.sql
 
 workspace/datamart/project
 workspace/datamart/target

@@ -102,19 +102,12 @@ spec:
           imagePullPolicy: Always 
           command: ["/bin/sh", "-c"]
           args: ["cd /workspace/datamart && sbt \"runMain DataMartExtractor\""]
-          volumeMounts:
-            - name: shared-data-volume
-              mountPath: /workspace/shared_data
           env:
             - name: DB_HOST
               value: "greenplum-service"
           envFrom: 
             - secretRef:
                 name: greenplum-secrets
-      volumes:
-        - name: shared-data-volume
-          persistentVolumeClaim:
-            claimName: shared-workspace-pvc
 
 ---
 # 7. Сервис Модели (PySpark) 

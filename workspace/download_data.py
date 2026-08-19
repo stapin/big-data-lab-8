@@ -4,26 +4,20 @@ import urllib.request
 import logging
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, monotonically_increasing_id
-from config import GreenplumConfig, SparkConfig
+from config import GreenplumConfig, spark_conf_manager
+from spark_manager import SparkManager, SparkProfile
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("DataSeeder")
 
 class DataSeeder:
     def __init__(self):
-        self.jar_path = SparkConfig.JDBC_DRIVER_PATH
+        self.jar_path = spark_conf_manager.JDBC_DRIVER_PATH
         self.download_jdbc_driver()
 
         logger.info("Initializing SparkSession for data seeding")
-        self.spark = SparkSession.builder \
-            .appName("Greenplum_Data_Seeder") \
-            .master(SparkConfig.MASTER) \
-            .config("spark.jars", self.jar_path) \
-            .config("spark.driver.extraClassPath", self.jar_path) \
-            .getOrCreate()
+        self.spark = SparkManager().get_session(SparkProfile.SEEDER)
             
-        self.spark.sparkContext.setLogLevel("ERROR")
-        # Теперь мы читаем локальный запеченный файл!
         self.file_path = "/workspace/sample_data.csv" 
 
     def download_jdbc_driver(self):
@@ -36,7 +30,6 @@ class DataSeeder:
 
     def process_and_load(self):
         logger.info("Reading local sample data into Spark DataFrame")
-        # Читаем обычный CSV (с заголовками и автоматическим определением типов)
         df = self.spark.read.csv(self.file_path, header=True, inferSchema=True)
         df = df.withColumn("id", monotonically_increasing_id())
 
@@ -71,7 +64,7 @@ class DataSeeder:
 if __name__ == "__main__":
     seeder = DataSeeder()
     try:
-        seeder.process_and_load() # Убрали метод download_data()
+        seeder.process_and_load()
     except Exception as err:
         logger.error(f"Seeder process failed: {err}")
     finally:
