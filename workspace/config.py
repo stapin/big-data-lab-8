@@ -21,8 +21,8 @@ class GreenplumConfig:
 
     
     RAW_TABLE = "products_raw"
-    FEATURES_TABLE = "features"
-    PREDICTIONS_TABLE = "predictions"
+    FEATURES_TABLE = "products_features"
+    PREDICTIONS_TABLE = "products_predictions"
     CLUSTERED_TABLE = "products_clustered"
 
 
@@ -34,7 +34,9 @@ class SparkConfigManager:
         with open(config_file, 'r', encoding='utf-8') as f:
             yaml_content = f.read()
 
-        self.JDBC_DRIVER_PATH = os.path.abspath("postgresql-42.5.4.jar")
+        self.JDBC_DRIVER_PATH = os.path.abspath("/workspace/postgresql-42.5.4.jar")
+
+        print(f"JDBC Driver path: {self.JDBC_DRIVER_PATH}")
         
         self._config = yaml.safe_load(yaml_content)
 
@@ -44,8 +46,9 @@ class SparkConfigManager:
             raise ValueError(f"Spark profile '{profile_name}' not found in config.yaml")
 
         profile = profiles[profile_name]
-        profile["spark.jars"] = self.JDBC_DRIVER_PATH
-        profile["spark.driver.extraClassPath"] = self.JDBC_DRIVER_PATH
+        profile["settings"]["spark.jars"] = self.JDBC_DRIVER_PATH
+        profile["settings"]['spark.driver.extraClassPath'] = self.JDBC_DRIVER_PATH
+        profile["settings"]["spark.executor.extraClassPath"] = self.JDBC_DRIVER_PATH
         
         return profile
 

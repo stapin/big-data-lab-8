@@ -1,0 +1,182 @@
+---
+# 1. Пространство имен
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bigdata-lab
+
+---
+# 2. Секреты для подключения к БД
+apiVersion: v1
+kind: Secret
+metadata:
+  name: greenplum-secrets
+  namespace: bigdata-lab
+type: Opaque
+stringData:
+  POSTGRES_USER: gpadmin
+  POSTGRES_PASSWORD: pivotal
+  POSTGRES_DB: gpadmin
+
+---
+# 3. Service для доступа к Greenplum
+apiVersion: v1
+kind: Service
+metadata:
+  name: greenplum-service
+  namespace: bigdata-lab
+spec:
+  selector:
+    app: greenplum
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+
+---
+# 4. Deployment базы данных Greenplum
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: greenplum-deployment
+  namespace: bigdata-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: greenplum
+  template:
+    metadata:
+      labels:
+        app: greenplum
+    spec:
+      containers:
+        - name: greenplum
+          image: projectairws/greenplum:latest
+          imagePullPolicy: IfNotPresent
+          tty: true
+          stdin: true
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: greenplum-secrets
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - "/bin/sh"
+                  - "-c"
+                  - |
+                    while ! su - gpadmin -c "psql -d gpadmin -c \"ALTER ROLE gpadmin WITH PASSWORD 'pivotal';\""; do sleep 5; done
+
+---
+# 5. Пайплайн Argo Workflow
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: bigdata-etl-ml-pipeline
+  namespace: bigdata-lab
+spec:
+  entrypoint: bigdata-pipeline
+
+  templates:
+    # Главный DAG (Граф зависимостей)
+    - name: bigdata-pipeline
+      dag:
+        tasks:
+          # Шаг 0: Ожидание готовности БД к соединениям
+          - name: wait-for-db
+            template: wait-db-template
+
+          # Шаг 1: Первичная загрузка сырых данных (Seeder)
+          - name: seed-data
+            dependencies: [wait-for-db]
+            template: seeder-template
+
+          # Шаг 2: Экстрактор витрины данных (Scala)
+          - name: extract-datamart
+            dependencies: [seed-data]
+            template: extractor-template
+
+          # Шаг 3: Обучение/инференс ML модели (PySpark)
+          - name: run-pyspark-model
+            dependencies: [extract-datamart]
+            template: pyspark-model-template
+
+          # Шаг 4: Загрузка результатов модели обратно в БД (Scala)
+          - name: load-datamart
+            dependencies: [run-pyspark-model]
+            template: loader-template
+
+    # -------------------------------------------------------------------------
+    # Шаблоны контейнеров для каждого этапа
+    # -------------------------------------------------------------------------
+
+    # Шаблон: Проверка готовности порта БД
+    - name: wait-db-template
+      container:
+        image: busybox:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            echo "Waiting for Greenplum service port 5432..."
+            until nc -z -w 2 greenplum-service 5432; do
+              echo "Database is not ready yet. Retrying in 5 seconds..."
+              sleep 5
+            done
+            echo "Database port is reachable! Waiting additional 10s for init scripts..."
+            sleep 10
+
+    - name: seeder-template
+      container:
+        image: pyspark-env-image:latest
+        imagePullPolicy: IfNotPresent
+        command: ["python", "/workspace/download_data.py"]
+        env:
+          - name: DB_HOST
+            value: "greenplum-service"
+        envFrom:
+          - secretRef:
+              name: greenplum-secrets
+
+    - name: extractor-template
+      container:
+        image: scala-datamart-image:v1
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c"]
+        args: ["cd /workspace/datamart && sbt \"runMain DataMart --mode extract\""]
+        env:
+          - name: DB_HOST
+            value: "greenplum-service"
+        envFrom:
+          - secretRef:
+              name: greenplum-secrets
+
+    - name: pyspark-model-template
+      container:
+        image: pyspark-env-image:v8
+        imagePullPolicy: IfNotPresent
+        command: ["python", "/workspace/main.py"]
+        env:
+          - name: DB_HOST
+            value: "greenplum-service"
+        envFrom:
+          - secretRef:
+              name: greenplum-secrets
+
+    - name: loader-template
+      retryStrategy:
+        limit: "5"
+        retryPolicy: "Always"
+      container:
+        image: scala-datamart-image:v1
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c"]
+        args: ["cd /workspace/datamart && sbt \"runMain DataMart --mode load\""]
+        env:
+          - name: DB_HOST
+            value: "greenplum-service"
+        envFrom:
+          - secretRef:
+              name: greenplum-secrets

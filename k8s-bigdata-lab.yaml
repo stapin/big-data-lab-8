@@ -19,20 +19,6 @@ stringData: # <--- МЕНЯЕМ data на stringData, чтобы писать т
   POSTGRES_DB: gpadmin
 
 ---
-# 3. Общее хранилище (Shared Volume) - Используется для передачи Parquet
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: shared-workspace-pvc
-  namespace: bigdata-lab
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
-
----
 # 4. Сервис для Базы Данных 
 apiVersion: v1
 kind: Service
@@ -98,17 +84,16 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: scala-datamart-extractor
-          image: scala-datamart-image:latest 
-          imagePullPolicy: Always 
+          image: scala-datamart-image:v1 
+          imagePullPolicy: IfNotPresent 
           command: ["/bin/sh", "-c"]
-          args: ["cd /workspace/datamart && sbt \"runMain DataMartExtractor\""]
+          args: ["cd /workspace/datamart && sbt \"runMain DataMart --mode extract\""]
           env:
             - name: DB_HOST
               value: "greenplum-service"
           envFrom: 
             - secretRef:
                 name: greenplum-secrets
-
 ---
 # 7. Сервис Модели (PySpark) 
 apiVersion: batch/v1
@@ -145,6 +130,7 @@ spec:
           persistentVolumeClaim:
             claimName: shared-workspace-pvc
 
+
 ---
 # 8. Сервис Витрины Данных - ЗАГРУЗЧИК (Scala)
 apiVersion: batch/v1
@@ -153,30 +139,20 @@ metadata:
   name: datamart-scala-loader-job
   namespace: bigdata-lab
 spec:
+  backoffLimit: 10 
   template:
     spec:
       restartPolicy: OnFailure
       containers:
         - name: scala-datamart-loader
-          image: scala-datamart-image:latest 
-          imagePullPolicy: Always 
+          image: scala-datamart-image:v1 
+          imagePullPolicy: IfNotPresent 
           command: ["/bin/sh", "-c"]
-          args: 
-            - |
-              echo "Ожидание результатов от ML модели..."
-              while [ ! -d /workspace/shared_data/results.parquet ]; do sleep 5; done;
-              echo "Результаты готовы! Загружаем кластеры в Greenplum..."
-              cd /workspace/datamart && sbt "runMain DataMartLoader"
-          volumeMounts:
-            - name: shared-data-volume
-              mountPath: /workspace/shared_data
+          # Убрали bash-скрипт с while, просто запускаем Scala в режиме load
+          args: ["cd /workspace/datamart && sbt \"runMain DataMart --mode load\""]
           env:
             - name: DB_HOST
               value: "greenplum-service"
           envFrom:
             - secretRef:
                 name: greenplum-secrets
-      volumes:
-        - name: shared-data-volume
-          persistentVolumeClaim:
-            claimName: shared-workspace-pvc
