@@ -146,10 +146,10 @@ spec:
         imagePullPolicy: IfNotPresent
         resources:
           requests:
-            cpu: "500m"     # Половина ядра (500 милликор)
+            cpu: "500m"
             memory: "2Gi"   
           limits:
-            cpu: "2"        # 2 ядра для параллельного чтения/записи JDBC
+            cpu: "2"
             memory: "3Gi"
         command: ["/bin/sh", "-c"]
         args: ["cd /workspace/datamart && sbt \"runMain DataMart --mode extract\""]
@@ -166,10 +166,10 @@ spec:
         imagePullPolicy: IfNotPresent
         resources:
           requests:
-            cpu: "1"        # Гарантируем 1 ядро для старта
-            memory: "4Gi"   # Минимально необходимая память для старта сессии
+            cpu: "1"
+            memory: "2Gi"
           limits:
-            cpu: "2"        # До 3 ядер для параллельных вычислений K-Means
+            cpu: "2"
             memory: "4Gi"
         command: ["python", "/workspace/main.py"]
         env:
@@ -188,10 +188,10 @@ spec:
         imagePullPolicy: IfNotPresent
         resources:
           requests:
-            cpu: "500m"     # Половина ядра (500 милликор)
+            cpu: "500m"
             memory: "2Gi"   
           limits:
-            cpu: "2"        # 2 ядра для параллельного чтения/записи JDBC
+            cpu: "2"
             memory: "3Gi"
         command: ["/bin/sh", "-c"]
         args: ["cd /workspace/datamart && sbt \"runMain DataMart --mode load\""]
