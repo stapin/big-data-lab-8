@@ -130,7 +130,7 @@ spec:
 
     - name: seeder-template
       container:
-        image: pyspark-env-image:latest
+        image: pyspark-env-image:v9
         imagePullPolicy: IfNotPresent
         command: ["python", "/workspace/download_data.py"]
         env:
@@ -144,6 +144,13 @@ spec:
       container:
         image: scala-datamart-image:v1
         imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: "500m"     # Половина ядра (500 милликор)
+            memory: "2Gi"   
+          limits:
+            cpu: "2"        # 2 ядра для параллельного чтения/записи JDBC
+            memory: "3Gi"
         command: ["/bin/sh", "-c"]
         args: ["cd /workspace/datamart && sbt \"runMain DataMart --mode extract\""]
         env:
@@ -155,8 +162,15 @@ spec:
 
     - name: pyspark-model-template
       container:
-        image: pyspark-env-image:v8
+        image: pyspark-env-image:v9
         imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: "1"        # Гарантируем 1 ядро для старта
+            memory: "4Gi"   # Минимально необходимая память для старта сессии
+          limits:
+            cpu: "2"        # До 3 ядер для параллельных вычислений K-Means
+            memory: "4Gi"
         command: ["python", "/workspace/main.py"]
         env:
           - name: DB_HOST
@@ -172,6 +186,13 @@ spec:
       container:
         image: scala-datamart-image:v1
         imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: "500m"     # Половина ядра (500 милликор)
+            memory: "2Gi"   
+          limits:
+            cpu: "2"        # 2 ядра для параллельного чтения/записи JDBC
+            memory: "3Gi"
         command: ["/bin/sh", "-c"]
         args: ["cd /workspace/datamart && sbt \"runMain DataMart --mode load\""]
         env:

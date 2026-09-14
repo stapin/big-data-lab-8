@@ -104,7 +104,7 @@ data:
             "name": "namespace",
             "type": "query",
             "datasource": "VictoriaMetrics",
-            "query": "label_values(container_memory_working_set_bytes{container!=\"\"}, namespace)",
+            "query": "label_values(container_memory_working_set_bytes{container=\"main\"}, namespace)",
             "refresh": 1,
             "label": "Namespace"
           },
@@ -112,7 +112,7 @@ data:
             "name": "job_pod",
             "type": "query",
             "datasource": "VictoriaMetrics",
-            "query": "label_values(container_memory_working_set_bytes{namespace=\"$namespace\", container!=\"\"}, pod)",
+            "query": "label_values(container_memory_working_set_bytes{namespace=\"$namespace\", container=\"main\"}, pod)",
             "refresh": 1,
             "label": "Job / Pod"
           }
@@ -125,7 +125,7 @@ data:
           "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
           "targets": [
             {
-              "expr": "max_over_time(container_memory_working_set_bytes{namespace=\"$namespace\", pod=\"$job_pod\", container!=\"\"}[$__range])",
+              "expr": "max(max_over_time(container_memory_working_set_bytes{namespace=\"$namespace\", pod=\"$job_pod\", container=\"main\"}[$__range]))",
               "format": "time_series"
             }
           ],
@@ -141,7 +141,7 @@ data:
           "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
           "targets": [
             {
-              "expr": "max_over_time(rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", pod=\"$job_pod\", container!=\"\"}[30s])[$__range:])",
+              "expr": "max(max_over_time(rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", pod=\"$job_pod\", container=\"main\"}[30s])[$__range:]))",
               "format": "time_series"
             }
           ],
@@ -157,7 +157,7 @@ data:
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
           "targets": [
             {
-              "expr": "container_memory_working_set_bytes{namespace=\"$namespace\", pod=\"$job_pod\", container!=\"\"}",
+              "expr": "container_memory_working_set_bytes{namespace=\"$namespace\", pod=\"$job_pod\", container=\"main\"}",
               "legendFormat": "{{pod}} ({{container}})"
             }
           ],
@@ -173,7 +173,7 @@ data:
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
           "targets": [
             {
-              "expr": "rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", pod=\"$job_pod\", container!=\"\"}[30s])",
+              "expr": "rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", pod=\"$job_pod\", container=\"main\"}[30s])",
               "legendFormat": "{{pod}} ({{container}})"
             }
           ],
