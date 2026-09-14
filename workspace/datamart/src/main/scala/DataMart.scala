@@ -10,7 +10,6 @@ import scala.collection.JavaConverters._
 
 object DataMart {
   def main(args: Array[String]): Unit = {
-    // 0. Сетевые фиксы для Spark
     System.setProperty("java.net.preferIPv4Stack", "true")
 
     if (args.length < 2 || args(0) != "--mode") {
@@ -19,9 +18,7 @@ object DataMart {
     }
     val mode = args(1)
 
-    // 1. Загрузка конфигурации через Typesafe Config
     println(">>> Чтение конфигурации из spark.conf...")
-    // Парсим внешний файл и автоматически подтягиваем переменные окружения (.resolve())
     val rootConfig = ConfigFactory.parseFile(new File("spark.conf")).resolve()
     val config = rootConfig.getConfig("datamart")
 
@@ -34,7 +31,6 @@ object DataMart {
     connectionProperties.put("password", dbConfig.getString("password"))
     connectionProperties.put("driver", "org.postgresql.Driver")
 
-    // Извлекаем названия таблиц
     val tables = config.getConfig("tables")
     val rawTable = tables.getString("raw")
     val featuresTable = tables.getString("features")
@@ -49,7 +45,6 @@ object DataMart {
       .config("spark.driver.bindAddress", "0.0.0.0")
       .config("spark.driver.host", "127.0.0.1")
 
-    // Динамически применяем все параметры из блока settings (если он есть)
     if (sparkConfig.hasPath("settings")) {
       val settings = sparkConfig.getConfig("settings")
       settings.entrySet().asScala.foreach { entry =>
@@ -61,7 +56,6 @@ object DataMart {
     val spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
 
-    // 3. Маршрутизация логики
     mode match {
       case "extract" => 
         extractAndTransform(spark, jdbcUrl, connectionProperties, rawTable, featuresTable)
@@ -75,9 +69,7 @@ object DataMart {
     spark.stop()
   }
 
-  // ==============================================================================
   // РЕЖИМ 1: Извлечение и Предобработка (EXTRACT)
-  // ==============================================================================
   def extractAndTransform(spark: SparkSession, url: String, props: Properties, rawTable: String, featuresTable: String): Unit = {
     println("=== [DataMart] Запуск извлечения и предобработки данных (Scala) ===")
     println(s">>> Чтение сырых данных из Greenplum (таблица $rawTable)...")
@@ -113,9 +105,7 @@ object DataMart {
     println("=== [DataMart] Данные успешно подготовлены и выгружены в БД! ===")
   }
 
-  // ==============================================================================
   // РЕЖИМ 2: Загрузка результатов кластеризации (LOAD)
-  // ==============================================================================
   def loadResults(spark: SparkSession, url: String, props: Properties, predictionsTable: String, clusteredTable: String): Unit = {
     println("=== [DataMart] Запуск загрузки результатов в Greenplum (Scala) ===")
     println(s">>> Чтение предсказаний модели из промежуточной таблицы $predictionsTable...")
