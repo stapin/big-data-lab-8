@@ -1,1 +1,0 @@
-SELECT * FROM products_clustered LIMIT 100;

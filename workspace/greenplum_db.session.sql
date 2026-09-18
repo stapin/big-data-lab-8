@@ -1,1 +1,0 @@
-SELECT * FROM products_raw LIMIT 100;
